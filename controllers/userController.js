@@ -169,6 +169,7 @@ exports.findFriend = catchAsyncError(async (req, res, next) => {
 
 // send Request 
 exports.sendRequest = catchAsyncError(async (req, res, next) => {
+    console.log("Request here")
     const { email, userId } = req.body;
 
     const recipientUser = await User.findOne({ email });
