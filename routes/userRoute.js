@@ -1,5 +1,5 @@
 const express = require('express');
-const { declineRequest, getAllRequests, loginUser, registerUser, logOut, getFriends, addFriend, findFriend, sendRequest, removeFriend} = require('../controllers/userController');
+const { declineRequest, getAllRequests, updateProfile, loginUser, registerUser, logOut, getFriends, addFriend, findFriend, sendRequest, removeFriend} = require('../controllers/userController');
 const { isAuthenticatedUser, authorizeRoles } = require('../middleware/auth');
 
 const router = express.Router();
@@ -13,6 +13,7 @@ router.route('/findfriend').post(findFriend);
 router.route('/sendrequest').post(sendRequest);
 router.route('/getrequestsall').get(getAllRequests);
 router.route('/declinerequest').put(declineRequest);
-router.route('/removefriend').delete(removeFriend)
+router.route('/removefriend').delete(removeFriend);
+router.route('/updateprofile').put(updateProfile)
 
 module.exports = router;

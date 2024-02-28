@@ -2,7 +2,7 @@ const catchAsyncError = require('../middleware/CatchAsyncError');
 const User = require('../models/userModel');
 const ErrorHandler = require('../utils/ErrorHandler');
 const mongoose = require('mongoose');
-
+const cloudinary = require('cloudinary')
 // Register a User in the database :
 
 exports.registerUser = catchAsyncError(async(req, res, next) => {
@@ -313,3 +313,39 @@ exports.removeFriend = catchAsyncError(async (req, res, next) => {
         });
     }
 });
+
+
+exports.updateProfile = catchAsyncError(async(req, res, next) => {
+    try {
+      const { name, email, image } = req.body;
+      const user = await User.findOne({ email });
+  
+      if (user.image) {
+        await cloudinary.v2.uploader.destroy(user.public_id);
+      }
+  
+      // Upload the new image
+      const result = await cloudinary.v2.uploader.upload(image, {
+        folder: "chat-app-users",
+        width: 450,
+        crop: "scale",
+      });
+  
+      // Update user's image with the new secure URL
+      user.name = name
+      user.public_id = result.public_id;
+      user.image = result.secure_url;
+      // Save the user to persist changes
+      await user.save();
+  
+      res.status(201).json({
+        success: true,
+        message: "Image uploaded successfully",
+        user: user,
+      });
+    } catch(error) {
+      console.log(error);
+      res.status(500).json({ success: false, message: "Internal Server Error" });
+    }
+  });
+  

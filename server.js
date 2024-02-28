@@ -6,8 +6,13 @@ const http = require('http');
 const { Server } = require('socket.io');
 const Message = require('./models/messageModel.js');
 const User = require('./models/userModel.js');
-
+const cloudinary  = require('cloudinary')
 dotenv.config({ path: "./config/config.env" });
+cloudinary.config({ 
+  cloud_name: process.env.CLOUDINARY_NAME, 
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_SECRET, 
+});
 connectDatabase();
 
 const server = http.createServer(app);
@@ -24,8 +29,8 @@ io.on('connection', (socket) => {
   console.log('User connected once');
 
   // Private Messaging
-  socket.on('join', (user_id) => {
-    socket.join(user_id);
+  socket.on('join', (data) => {
+    socket.join(data);
   });
 
   socket.on('sendMessage', async (data) => {
@@ -92,7 +97,7 @@ io.on('connection', (socket) => {
 socket.on('sendRequest', (data) => {
   console.log('Request here');
   const { email, user } = data;
-  const friend = User.findOne({ email });
+  const friend = User.findOne({ email:email });
   io.to(friend._id).emit('requestReceived'); // Use the correct event name here
 });
 

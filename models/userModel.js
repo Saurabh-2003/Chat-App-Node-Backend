@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema({
         maxLength:[30, "Password should be greater than 30 characters"],
         select:false,
       },
+      public_id : {
+        type:String,
+        required:false
+      },
       image:{
         type:String,
         required: false
