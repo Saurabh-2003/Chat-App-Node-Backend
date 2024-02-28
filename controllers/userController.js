@@ -79,7 +79,7 @@ exports.getFriends = catchAsyncError(async (req, res, next) => {
 
     try {
         // Find the user in the database
-        const user = await User.findById(userId).populate('friends', 'name email'); // Adjust the projection as needed
+        const user = await User.findById(userId).populate('friends', 'name email image'); // Adjust the projection as needed
 
         if (!user) {
             return res.status(404).json({
