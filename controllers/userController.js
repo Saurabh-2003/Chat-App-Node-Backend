@@ -79,7 +79,7 @@ exports.getFriends = catchAsyncError(async (req, res, next) => {
 
     try {
         // Find the user in the database
-        const user = await User.findById(userId).populate('friends', 'name email image'); // Adjust the projection as needed
+        const user = await User.findById(userId).populate('friends', 'name email admin image isGroup'); // Adjust the projection as needed
 
         if (!user) {
             return res.status(404).json({
@@ -315,6 +315,8 @@ exports.removeFriend = catchAsyncError(async (req, res, next) => {
 });
 
 
+// Update the Profile  :
+
 exports.updateProfile = catchAsyncError(async(req, res, next) => {
     try {
       const { name, email, image } = req.body;
@@ -349,3 +351,103 @@ exports.updateProfile = catchAsyncError(async(req, res, next) => {
     }
   });
   
+
+  exports.getMyInfo = catchAsyncError(async(req, res, next) => {
+    try {
+        const id = req.params.id;
+        const user = await User.findById(id);
+
+        if(user){
+            res.status(201).json({
+                success : true,
+                message : "User info fetched successfully",
+                info : user,
+            })
+        }else{
+            res.status(301).json({
+                success:false,
+                message:"User not found"
+            })
+        }
+
+    }catch(error) {
+        console.log(error)
+    }
+  })
+
+
+
+
+  exports.createGroup = catchAsyncError(async (req, res, next) => {
+    try {
+        const { groupName, admin, participants } = req.body;
+        console.log(req.body)
+        const adminUser = await User.findOne({ email: admin });
+
+        if (!adminUser) {
+            return next(new ErrorHandler('Admin user not found', 404));
+        }
+
+        const groupUser = await User.create({
+            name: groupName,
+            isGroup: true,
+            admin: adminUser._id,
+        });
+
+        groupUser.friends.push(adminUser._id)
+        adminUser.friends.push(groupUser._id)
+        await adminUser.save(); 
+        await groupUser.save();
+
+        const participantsArray = JSON.parse(participants);
+
+        // Send join requests to participants
+        for (const participantEmail of participantsArray) {
+            console.log(participantEmail);
+            const participantUser = await User.findOne({ email: participantEmail });
+            console.log()
+            if (!participantUser) {
+                return next(new ErrorHandler(`User with email ${participantEmail} not found`, 404));
+            }
+
+            participantUser.requestsRecieved.push(groupUser._id);
+            await participantUser.save();
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Group Created Successfully',
+            groupUser
+        });
+    } catch (error) {
+        return next(new ErrorHandler(`Group Not Created due to some Problem: ${error}`, 400));
+    }
+});
+
+
+exports.deleteGroup = catchAsyncError(async (req, res, next) => {
+    try {
+        const { id } = req.body;
+        console.log('request here', id)
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid group ID.' });
+        }
+
+        // Find the group by its id
+        const group = await User.findById(id);
+        console.log(group)
+        // Check if the group exists
+        if (!group) {
+            return res.status(404).json({ success: false, message: 'Group not found.' });
+        }
+        console.log('group found')
+        await group.deleteOne();
+        console.log('group deleted')
+        // Respond with success message
+        res.status(200).json({ success: true, message: 'Group deleted successfully.' });
+    } catch (error) {
+        console.error('Error deleting group:', error);
+        // Handle any errors that occur during the deletion process
+        res.status(500).json({ success: false, message: 'An error occurred while deleting the group.' });
+    }
+});

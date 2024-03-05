@@ -32,22 +32,49 @@ io.on('connection', (socket) => {
   socket.on('join', (data) => {
     socket.join(data);
   });
-
   socket.on('sendMessage', async (data) => {
     console.log("message here in server");
     try {
-      const { from, to, mess } = data;
-      const message = new Message({
-        from, to, message: mess
-      });
-      await message.save();
-      io.to(to).emit('messageReceived', message);  // Emitting to the receiver
-      io.to(from).emit('messageReceived', message);  // Emitting to the sender
+        const { from, to, mess } = data;
 
+        // Fetch the recipient user
+        const recipient = await User.findById(to);
+
+        if (recipient.isGroup) {
+            // If the recipient is a group, set the sender's name and image from the sender user
+            const sender = await User.findById(from);
+
+            // Create the message with sender's name and image
+            const message = new Message({
+                from, // Sender's ID
+                to: recipient._id, // Recipient's ID
+                message: mess, // Message content
+                // Set virtual fields for sender's name and image
+            });
+
+            await message.save(); // Save the message
+
+            // Emit the message to each member of the group
+            recipient.friends.forEach(friend => {
+                io.to(friend.toString()).emit('messageReceived', message);
+            });
+        } else {
+            // If the recipient is an individual user, just save and emit the message
+            const message = new Message({
+                from,
+                to,
+                message: mess
+            });
+            await message.save(); // Save the message
+            io.to(to).emit('messageReceived', message); // Emitting to the receiver
+            io.to(from).emit('messageReceived', message); // Emitting to the sender
+        }
     } catch (error) {
-      console.error('Error sending message:', error.message);
+        console.error('Error sending message:', error.message);
     }
-  });
+});
+
+  
 
   // Public Groups
   socket.on("joinRoom", (data) => {

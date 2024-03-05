@@ -8,17 +8,28 @@ const userSchema = new mongoose.Schema({
         type: String,
         required:[true, "Please Enter a Username "],
         maxLength:[30, "Username cannot exceed 30 characters "],
-        unique:true
     },
-    email :{
-        type:String,
-        required: [true, "Please Enter Your Email"],
-        unique:true,
-        validate: [validator.isEmail, "Please Enter a valid Email"]
-      },
+    isGroup : {
+      type:Boolean,
+      required:false,
+      default:false
+    },
+    email: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows multiple documents to have a null value for the field
+      validate: [validator.isEmail, "Please Enter a valid Email"]
+  },
+  
+    admin: {
+      type: String,
+      required: () => {
+        return this.isGroup;
+      }
+    },
     password: {
         type:String,
-        required: [true, "Please Enter your Password"],
+        required: () => {return this.isGroup},
         minLength:[9, "Please should be greater than 8 Characters"],
         maxLength:[30, "Password should be greater than 30 characters"],
         select:false,
@@ -51,12 +62,13 @@ const userSchema = new mongoose.Schema({
           ref: 'User',
           unique:true
         }
-      ]
+      ],
+
 });
 
 // Before Saving the password Encrpt it :
 userSchema.pre('save', async function(next) {
-    if(!this.isModified('password')){
+    if(!this.isModified('password') || this.isGroup){
         next();
     }
     this.password = await bcrypt.hash(this.password, 10);

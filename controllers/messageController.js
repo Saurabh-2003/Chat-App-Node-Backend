@@ -39,6 +39,18 @@ exports.createMessage = catchAsyncError(async (req, res, next) => {
 exports.getAllMessages = catchAsyncError(async (req, res, next) => {
     const { userId, friendId } = req.body;
     
+    const friend = await User.findById(friendId);
+    if(friend?.isGroup){
+        const messages = await Message.find({
+            to:friendId,
+        })
+        messages.sort((a, b) => a.timestamp - b.timestamp);
+        res.status(200).json({
+            success: true,
+            messages: messages,
+        });
+        return;
+    }
     // Find messages where from is userId and to is friendId
     const messagesFromUserToFriend = await Message.find({
         from: userId,
