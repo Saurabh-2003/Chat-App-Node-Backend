@@ -352,29 +352,36 @@ exports.updateProfile = catchAsyncError(async(req, res, next) => {
   });
   
 
-  exports.getMyInfo = catchAsyncError(async(req, res, next) => {
+  exports.getMyInfo = catchAsyncError(async (req, res, next) => {
     try {
+        console.log("request here")
         const id = req.params.id;
-        const user = await User.findById(id);
+        let user = await User.findById(id);
 
-        if(user){
+        if (user) {
+            if (user.isGroup) {
+                user = await user.populate({
+                    path: 'friends',
+                    select: '_id name email image'
+                });
+            }
+
             res.status(201).json({
-                success : true,
-                message : "User info fetched successfully",
-                info : user,
-            })
-        }else{
+                success: true,
+                message: "User info fetched successfully",
+                info: user,
+            });
+        } else {
             res.status(301).json({
-                success:false,
-                message:"User not found"
-            })
+                success: false,
+                message: "User not found"
+            });
         }
 
-    }catch(error) {
+    } catch (error) {
         console.log(error)
     }
-  })
-
+})
 
 
 
@@ -433,21 +440,85 @@ exports.deleteGroup = catchAsyncError(async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Invalid group ID.' });
         }
 
-        // Find the group by its id
         const group = await User.findById(id);
         console.log(group)
-        // Check if the group exists
         if (!group) {
             return res.status(404).json({ success: false, message: 'Group not found.' });
         }
         console.log('group found')
         await group.deleteOne();
         console.log('group deleted')
-        // Respond with success message
         res.status(200).json({ success: true, message: 'Group deleted successfully.' });
     } catch (error) {
         console.error('Error deleting group:', error);
-        // Handle any errors that occur during the deletion process
         res.status(500).json({ success: false, message: 'An error occurred while deleting the group.' });
     }
 });
+
+
+exports.addParticipantsToGroup = catchAsyncError(async (req, res, next) => {
+    try {
+        const { participants, admin, groupId } = req.body;
+        console.log(participants, admin, groupId)
+        const adminUser = await User.findOne({ email: admin });
+        if (!adminUser) {
+            return next(new ErrorHandler('Admin user not found', 404));
+        }
+
+        const group = await User.findById(groupId);
+        if (!group || !group.isGroup) {
+            return next(new ErrorHandler(`Group with ID ${groupId} not found`, 404));
+        }
+
+        if (adminUser._id.toString() !== group.admin.toString()) {
+            return next(new ErrorHandler('You are not authorized as you are not the admin', 403));
+        }
+
+        const participantEmails = JSON.parse(participants);
+        const invalidEmails = [];
+        const validEmails = [];
+        for (const participantEmail of participantEmails) {
+            const participantUser = await User.findOne({ email: participantEmail })
+            console.log(participantUser);
+            if (!participantUser) {
+                invalidEmails.push(participantEmail);
+            } 
+            else {
+                participantUser.requestsRecieved.push(group._id);
+                await participantUser.save();
+                validEmails.push(participantEmail)
+            }
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Request Sent Successfully to : ',
+            validEmails: validEmails,
+            invalidEmails: invalidEmails
+        });
+    } catch (error) {
+        return next(new ErrorHandler(`Error updating group: ${error}`, 400));
+    }
+});
+
+
+exports.removeParticiapent = async (req, res, next) => {
+    try {
+        const { participantId, groupId } = req.query;
+      console.log(groupId, participantId)
+      const group = await User.findById(groupId);
+      const participant = await User.findById(participantId);
+      group.friends.pull(participantId);
+      participant.friends.pull(groupId);
+      await group.save();
+      await participant.save();
+  
+      res.status(200).json({
+        success: true,
+        message: 'Participant removed from the group successfully',
+      });
+    } catch (error) {
+      return next(new ErrorHandler('Error removing participant from the group', 500));
+    }
+  };
+  

@@ -36,7 +36,7 @@ io.on('connection', (socket) => {
     console.log("message here in server");
     try {
         const { from, to, mess } = data;
-
+        console.log("from : " + from," To : "+  to, " Message : " +  mess )
         // Fetch the recipient user
         const recipient = await User.findById(to);
 

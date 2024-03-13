@@ -54,11 +54,13 @@ exports.getAllMessages = catchAsyncError(async (req, res, next) => {
     // Find messages where from is userId and to is friendId
     const messagesFromUserToFriend = await Message.find({
         from: userId,
+        to:friendId
     });
     
     // Find messages where from is friendId and to is userId
     const messagesFromFriendToUser = await Message.find({
         from: friendId,
+        to:userId
     });
     
     // Concatenate the two arrays of messages

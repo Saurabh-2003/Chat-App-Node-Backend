@@ -22,7 +22,6 @@ const messageSchema = new mongoose.Schema({
     }
 }, { toJSON: { virtuals: true } });
 
-// Define a virtual field for 'fromName'
 messageSchema.virtual('fromName', {
     ref: 'User',
     localField: 'from',
@@ -32,7 +31,6 @@ messageSchema.virtual('fromName', {
     options: { select: 'name' }
 });
 
-// Define a virtual field for 'fromImage'
 messageSchema.virtual('fromImage', {
     ref: 'User',
     localField: 'from',
