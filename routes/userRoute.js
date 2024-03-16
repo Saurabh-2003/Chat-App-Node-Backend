@@ -11,7 +11,7 @@ router.route('/addfriend').post(addFriend);
 router.route('/friends').post(getFriends);
 router.route('/findfriend').post(findFriend);
 router.route('/sendrequest').post(sendRequest);
-router.route('/getrequestsall').get(getAllRequests);
+router.route('/getrequestsall/:id').get(getAllRequests);
 router.route('/declinerequest').put(declineRequest);
 router.route('/removefriend').delete(removeFriend);
 router.route('/updateprofile').put(updateProfile)

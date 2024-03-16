@@ -24,11 +24,9 @@ const io = new Server(server, {
   },
 });
 
-// When a socket connects to the server :
 io.on('connection', (socket) => {
   console.log('User connected once');
 
-  // Private Messaging
   socket.on('join', (data) => {
     socket.join(data);
   });
@@ -37,37 +35,29 @@ io.on('connection', (socket) => {
     try {
         const { from, to, mess } = data;
         console.log("from : " + from," To : "+  to, " Message : " +  mess )
-        // Fetch the recipient user
         const recipient = await User.findById(to);
 
         if (recipient.isGroup) {
-            // If the recipient is a group, set the sender's name and image from the sender user
             const sender = await User.findById(from);
-
-            // Create the message with sender's name and image
             const message = new Message({
-                from, // Sender's ID
-                to: recipient._id, // Recipient's ID
-                message: mess, // Message content
-                // Set virtual fields for sender's name and image
+                from,
+                to: recipient._id,
+                message: mess, 
             });
 
-            await message.save(); // Save the message
-
-            // Emit the message to each member of the group
+            await message.save(); 
             recipient.friends.forEach(friend => {
                 io.to(friend.toString()).emit('messageReceived', message);
             });
         } else {
-            // If the recipient is an individual user, just save and emit the message
             const message = new Message({
                 from,
                 to,
                 message: mess
             });
-            await message.save(); // Save the message
-            io.to(to).emit('messageReceived', message); // Emitting to the receiver
-            io.to(from).emit('messageReceived', message); // Emitting to the sender
+            await message.save(); 
+            io.to(to).emit('messageReceived', message); 
+            io.to(from).emit('messageReceived', message); 
         }
     } catch (error) {
         console.error('Error sending message:', error.message);
@@ -130,13 +120,8 @@ socket.on('sendRequest', (data) => {
 
 // accept the Request :-
 socket.on('acceptedRequest', (data) => {
-
-  io.to(data.from).emit('requestAccepted');
-  io.to(data.to).emit('requestAccepted');
-});
-
-socket.on('declineRequest', (data) => {
-  io.to(data.to).to(data.from).emit('requestDeclined');
+  console.log(data.userId, data.friendId);
+  io.to(data.userId).to(data.friendId).emit('requestAccepted');
 });
 
 socket.on('friendDelete', (data) => {

@@ -3,73 +3,100 @@ const User = require('../models/userModel');
 const ErrorHandler = require('../utils/ErrorHandler');
 const mongoose = require('mongoose');
 const cloudinary = require('cloudinary')
-// Register a User in the database :
+const Message = require('../models/messageModel')
+// Login a User :
+exports.loginUser = catchAsyncError(async (req, res, next) => {
+    const { email, password } = req.body;
+    console.log(email, password)
+    if (!email || !password) {
+        return next(new ErrorHandler("Please enter email and password", 400));
+    }
 
-exports.registerUser = catchAsyncError(async(req, res, next) => {
-    const {name, email, password, image=null} = req.body;
-    console.log('request here')
-    const user = await User.create({
-        name, 
-        email, 
-        password,
-        image,
-    });
+    try {
+        console.log("request here for login")
+        const user = await User.findOne({ email }).select("+password");
+        
+        if (!user) {
+            return next(new ErrorHandler("Invalid email or password", 401));
+        }
 
-    console.log('request here')
-    res.status(201).json({
-        success:true,
-        user
-    })
+        const isPasswordMatched = await user.comparePassword(password);
+        if (!isPasswordMatched) {
+            return next(new ErrorHandler("Invalid email or password", 401));
+        }
+
+        const token = user.generateAuthToken(); 
+        console.log(token)
+        res.cookie('token', token, {
+            httpOnly: true,
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+        });
+
+        res.status(200).json({
+            success: true,
+            user
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "An Error Occurred, Please try again later"
+        });
+    }
 });
 
+// Register a User
+exports.registerUser = catchAsyncError(async (req, res, next) => {
+    const { name, email, password, image = null } = req.body;
 
-// Login a User into the application :
+    try {
+        const existingUser = await User.findOne({ email });
 
-exports.loginUser = catchAsyncError(async(req, res, next) => {
-    const {email, password} = req.body;
-    // Check if the user has entered both values :
-    if(!email || !password){
-        return next(new ErrorHandler("Please Enter Email and Password ", 400));
+        if (existingUser) {
+            return next(new ErrorHandler("A user is already registered with this email", 401));
+        }
+
+        const user = await User.create({ name, email, password, image });
+
+        const token = user.generateAuthToken(); 
+        
+        res.cookie('token', token, {
+            httpOnly: true,
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+        });
+
+        res.status(201).json({
+            success: true,
+            user
+        });
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({ success: false, errors });
+        }
+
+        res.status(500).json({ success: false, message: "An Error Occurred, Please try again later" });
     }
+});
 
-    // find the user in the database : 
-    const user  = await User.findOne({email}).select("+password");
-
-    // If the user is not found in the database :
-    if(!user){
-        return next(new ErrorHandler("Invalid Email", 401));
-    }
-
-    // Check if the passoword matches with the hashed password  :
-    const isPasswordMatched = await user.comparePassword(password);
-    if(!isPasswordMatched){
-        return next(new ErrorHandler("Invalid Email or Password!!"));
-    }
-
+// Logout a user
+exports.logOut = catchAsyncError(async (req, res, next) => {
+    res.clearCookie('token'); 
     res.status(200).json({
-        success:true,
-        user
-    });
-
-
-});
-
-
-// Logout a User :
-exports.logOut = catchAsyncError(async(req, res, next) => {
-    res.status(200).json({
-        success:true,
-        message:"Logged Out"
+        success: true,
+        message: "Logged Out"
     });
 });
+
+
 
 
 // get the list of friends :
-
 exports.getFriends = catchAsyncError(async (req, res, next) => {
-    const userId = req.body.userId; // Assuming you provide userId in the request body
-
-    // Validate ObjectId
+    const userId = req.body.userId; 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
         return res.status(400).json({
             success: false,
@@ -78,9 +105,7 @@ exports.getFriends = catchAsyncError(async (req, res, next) => {
     }
 
     try {
-        // Find the user in the database
         const user = await User.findById(userId).populate('friends', 'name email admin image isGroup'); // Adjust the projection as needed
-
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -93,7 +118,6 @@ exports.getFriends = catchAsyncError(async (req, res, next) => {
             friends: user.friends,
         });
     } catch (error) {
-        console.error('Error getting friends:', error);
         res.status(500).json({
             success: false,
             message: 'Internal Server Error',
@@ -101,41 +125,49 @@ exports.getFriends = catchAsyncError(async (req, res, next) => {
     }
 });
 
-// add a friend :
-
 exports.addFriend = catchAsyncError(async (req, res, next) => {
-    const userId = req.body.userId; // Change from myId to userId
+    const userId = req.body.userId; 
     const friendId = req.body.friendId;
 
-    try {
-        // Update the user's document to add the friend to the friends array
-        const updatedUser = await User.findByIdAndUpdate(
-            userId,
-            { $addToSet: { friends: friendId } },
-            { new: true }
-        );
-        await User.findByIdAndUpdate(
-            friendId,
-            { $addToSet: { friends: userId } },
-            { new: true }
-        );
-
-        await User.findByIdAndUpdate(friendId, {
-            $pull:{requestsRecieved : userId},
+    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(friendId)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid user ID',
         });
-    
-        // update the senders friend request sent array :
-        await User.findByIdAndUpdate(userId, {
-            $pull:{requestsSent: friendId}
-        })
+    }
 
+    try {
+        const user = await User.findById(userId);
+        const friend = await User.findById(friendId);
 
-        if (!updatedUser) {
+        if (!user) {
             return res.status(404).json({
                 success: false,
-                message: 'User not found',
+                message: 'You are not a valid User!!',
             });
         }
+
+        if (!friend) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found !!',
+            });
+        }
+
+        // Add friendId to user's friends array if not already present
+        await User.findByIdAndUpdate(userId, { $addToSet: { friends: friendId } });
+
+        // Add userId to friend's friends array if not already present
+        await User.findByIdAndUpdate(friendId, { $addToSet: { friends: userId } });
+
+        // Remove friendId from friend's requestsReceived array
+        await User.findByIdAndUpdate(friendId, { $pull: { requestsRecieved: userId } });
+
+        // Remove userId from user's requestsSent array
+        await User.findByIdAndUpdate(userId, { $pull: { requestsSent: friendId } });
+
+        // Fetch updated user document
+        const updatedUser = await User.findById(userId);
 
         res.status(201).json({
             success: true,
@@ -152,67 +184,75 @@ exports.addFriend = catchAsyncError(async (req, res, next) => {
 
 
 
-// find a user in the database to add as a friend :
-exports.findFriend = catchAsyncError(async (req, res, next) => {
-    const {email} = req.body;
-    const user = await User.findOne({email});
-    console.log(user);
-    if (!user) {
-        return next(new ErrorHandler("User not Found", 400));
-    }
 
-    res.status(201).json({
+// Find a user in the database to add as a friend
+exports.findFriend = catchAsyncError(async (req, res, next) => {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+        return next(new ErrorHandler("User not found", 404));
+    }
+    res.status(200).json({
         success: true,
-        friend: user._id
+        message:"Email is Valid",
+        friendId: user._id
     });
 });
 
-// send Request 
-exports.sendRequest = catchAsyncError(async (req, res, next) => {
-    console.log("Request here")
-    const { email, userId } = req.body;
 
+// Send a friend request
+exports.sendRequest = catchAsyncError(async (req, res, next) => {
+    console.log("request to send here");
+    const { email, userId } = req.body;
     const recipientUser = await User.findOne({ email });
     const senderUser = await User.findById(userId);
 
-    // Convert ObjectIds to strings for comparison
-    const senderUserIdString = senderUser._id.toString();
-    const recipientUserIdString = recipientUser._id.toString();
-
-    if (senderUserIdString === recipientUserIdString) {
-        return next(new ErrorHandler("Cannot send a request to yourself"));
+    if (!recipientUser) {
+        return next(new ErrorHandler('Recipient user not found', 404));
     }
 
-    if (!recipientUser) {
-        return next(new ErrorHandler('User not Found!!', 400));
+    if (!senderUser) {
+        return next(new ErrorHandler('Sender user not found', 404));
+    }
+
+    const senderUserIdString = senderUser._id.toString();
+    const recipientUserIdString = recipientUser?._id?.toString();
+
+    if (senderUserIdString === recipientUserIdString) {
+        return next(new ErrorHandler("Cannot send a friend request to yourself", 400));
     }
 
     if (senderUser.friends.includes(recipientUser._id) || recipientUser.friends.includes(senderUser._id)) {
-        return next(new ErrorHandler('Already a friend', 400));
+        return next(new ErrorHandler('You are already friends', 400));
     }
 
     if (senderUser.requestsSent.includes(recipientUser._id)) {
-        return next(new ErrorHandler('Request already sent!', 400));
+        return next(new ErrorHandler('Friend request already sent', 400));
     }
 
-    recipientUser.requestsRecieved.push(senderUser._id);
-    await recipientUser.save();
+    await User.findByIdAndUpdate(
+        recipientUser._id,
+        { $push: { requestsRecieved: senderUser._id } }
+    );
 
-    senderUser.requestsSent.push(recipientUser._id);
-    await senderUser.save();
+    await User.findByIdAndUpdate(
+        senderUser._id,
+        { $push: { requestsSent: recipientUser._id } }
+    );
 
     res.status(200).json({
         success: true,
-        message: 'Friend request sent successfully!',
+        message: 'Friend request sent successfully',
     });
 });
+
 
 
 
 // Get All the Requests for a particular User
 exports.getAllRequests = catchAsyncError(async (req, res, next) => {
-    const userId = req.query.id; 
-    
+    const userId = req.params.id; 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
         success: false,
@@ -221,8 +261,7 @@ exports.getAllRequests = catchAsyncError(async (req, res, next) => {
     }
   
     try {
-      // Find the user in the database
-      const user = await User.findById(userId).populate('requestsRecieved', '_id name');
+      const user = await User.findById(userId).populate('requestsRecieved', '_id name isGroup');
   
       if (!user) {
         return res.status(404).json({
@@ -230,7 +269,7 @@ exports.getAllRequests = catchAsyncError(async (req, res, next) => {
           message: 'User not found',
         });
       }
-  
+      console.log(user)
       res.status(201).json({
         success: true,
         requestsRecieved: user.requestsRecieved,
@@ -245,18 +284,20 @@ exports.getAllRequests = catchAsyncError(async (req, res, next) => {
   });
   
   
-  
 
 // Decline a request :
 exports.declineRequest = catchAsyncError(async(req, res, next) => {
     const {senderId, recieverId} = req.body;
-
-    // Update the recievers friendRequest recieved array :
+    if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(recieverId) ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid ObjectId',
+        });
+      }
     await User.findByIdAndUpdate(recieverId, {
         $pull:{requestsRecieved : senderId},
     });
 
-    // update the senders friend request sent array :
     await User.findByIdAndUpdate(senderId, {
         $pull:{requestsSent: recieverId}
     })
@@ -267,11 +308,11 @@ exports.declineRequest = catchAsyncError(async(req, res, next) => {
     })
 })
 
+
 // Remove a friend :
 exports.removeFriend = catchAsyncError(async (req, res, next) => {
     const { userId, friendId } = req.body;
 
-    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(friendId)) {
         return res.status(400).json({
             success: false,
@@ -280,14 +321,12 @@ exports.removeFriend = catchAsyncError(async (req, res, next) => {
     }
 
     try {
-        // Remove friendId from the user's friends array
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             { $pull: { friends: friendId } },
             { new: true }
         );
 
-        // Remove userId from the friend's friends array
         const updatedFriend = await User.findByIdAndUpdate(
             friendId,
             { $pull: { friends: userId } },
@@ -300,10 +339,11 @@ exports.removeFriend = catchAsyncError(async (req, res, next) => {
                 message: 'User or friend not found',
             });
         }
+        await Message.deleteMany({ $or: [{ from: userId, to: friendId }, { from: friendId, to: userId }] });
 
         res.status(200).json({
             success: true,
-            message: 'Friend removed successfully!',
+            message: 'Friend removed successfully! Messages between users deleted.',
         });
     } catch (error) {
         console.error('Error removing friend:', error);
@@ -314,47 +354,56 @@ exports.removeFriend = catchAsyncError(async (req, res, next) => {
     }
 });
 
-
-// Update the Profile  :
-
-exports.updateProfile = catchAsyncError(async(req, res, next) => {
+// Update User Profile(Image and Username only) : 
+exports.updateProfile = catchAsyncError(async (req, res, next) => {
     try {
-      const { name, email, image } = req.body;
-      const user = await User.findOne({ email });
-  
-      if (user.image) {
-        await cloudinary.v2.uploader.destroy(user.public_id);
-      }
-  
-      // Upload the new image
-      const result = await cloudinary.v2.uploader.upload(image, {
-        folder: "chat-app-users",
-        width: 450,
-        crop: "scale",
-      });
-  
-      // Update user's image with the new secure URL
-      user.name = name
-      user.public_id = result.public_id;
-      user.image = result.secure_url;
-      // Save the user to persist changes
-      await user.save();
-  
-      res.status(201).json({
-        success: true,
-        message: "Image uploaded successfully",
-        user: user,
-      });
-    } catch(error) {
-      console.log(error);
-      res.status(500).json({ success: false, message: "Internal Server Error" });
+        const { name, email, image } = req.body;
+        console.log(name, email, image);
+
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is invalid' });
+        }
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found - Update Failed' });
+        }
+
+        if (image && image !== user.image) {
+            if (user.image && user.public_id) {
+                await cloudinary.v2.uploader.destroy(user.public_id);
+            }
+            
+            const result = await cloudinary.v2.uploader.upload(image, {
+                folder: 'chat-app-users',
+                width: 450,
+                crop: 'scale',
+            });
+
+            user.public_id = result.public_id;
+            user.image = result.secure_url;
+        }
+
+        if (name) {
+            user.name = name;
+        }
+
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            user: user,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error });
     }
-  });
-  
+});
 
-  exports.getMyInfo = catchAsyncError(async (req, res, next) => {
+
+// Get User Info :
+exports.getMyInfo = catchAsyncError(async (req, res, next) => {
     try {
-        console.log("request here")
         const id = req.params.id;
         let user = await User.findById(id);
 
@@ -365,73 +414,122 @@ exports.updateProfile = catchAsyncError(async(req, res, next) => {
                     select: '_id name email image'
                 });
             }
-
-            res.status(201).json({
+            res.status(200).json({
                 success: true,
                 message: "User info fetched successfully",
                 info: user,
             });
         } else {
-            res.status(301).json({
+            res.status(404).json({
                 success: false,
                 message: "User not found"
             });
         }
 
     } catch (error) {
-        console.log(error)
+        console.error("Error fetching user info:", error);
+        res.status(500).json({
+            success: false,
+            message: "Some Error Occured , Please try again"
+        });
     }
-})
+});
 
-
-
-  exports.createGroup = catchAsyncError(async (req, res, next) => {
+// Create a Group :
+exports.createGroup = catchAsyncError(async (req, res, next) => {
     try {
         const { groupName, admin, participants } = req.body;
-        console.log(req.body)
-        const adminUser = await User.findOne({ email: admin });
-
-        if (!adminUser) {
-            return next(new ErrorHandler('Admin user not found', 404));
+        
+        if (!groupName || !admin || !participants) {
+            return res.status(400).json({
+                success: false,
+                message: 'groupName, admin, or participants is missing',
+            });
+        }
+        
+        const existingGroup = await User.findOne({ name: groupName, isGroup: true });
+        if (existingGroup) {
+            return res.status(400).json({
+                success: false,
+                message: 'Group name already exists. Please choose a different name.',
+            });
         }
 
-        const groupUser = await User.create({
+        const adminUser = await User.findOne({ email: admin });
+        if (!adminUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'Admin user not found',
+            });
+        }
+
+        const group = await User.create({
             name: groupName,
             isGroup: true,
             admin: adminUser._id,
         });
 
-        groupUser.friends.push(adminUser._id)
-        adminUser.friends.push(groupUser._id)
-        await adminUser.save(); 
-        await groupUser.save();
+        await User.updateOne(
+            { _id: group._id },
+            { $addToSet: { friends: adminUser._id } }
+        );
 
-        const participantsArray = JSON.parse(participants);
+        await User.updateOne(
+            { _id: adminUser._id },
+            { $addToSet: { friends: group._id } }
+        );
 
-        // Send join requests to participants
-        for (const participantEmail of participantsArray) {
-            console.log(participantEmail);
+        const participantEmails = JSON.parse(participants);
+        const invalidEmails = [];
+        const validEmails = [];
+
+        for (const participantEmail of participantEmails) {
             const participantUser = await User.findOne({ email: participantEmail });
-            console.log()
+           
             if (!participantUser) {
-                return next(new ErrorHandler(`User with email ${participantEmail} not found`, 404));
+                invalidEmails.push(participantEmail);
+            } else {
+                await User.updateOne(
+                    { _id: participantUser._id },
+                    { $addToSet: { requestsRecieved: group._id } }
+                );
+                validEmails.push(participantEmail);
             }
-
-            participantUser.requestsRecieved.push(groupUser._id);
-            await participantUser.save();
         }
 
-        res.status(200).json({
+        if (validEmails.length === 0) {
+            await group.deleteOne();
+            return res.status(400).json({
+                success: false,
+                message: 'No valid participant email. Please check the emails entered',
+                invalidEmails: invalidEmails
+            });
+        }
+
+        res.status(201).json({
             success: true,
-            message: 'Group Created Successfully',
-            groupUser
+            message: 'Group created successfully',
+            group: group,
+            validEmails: validEmails,
+            invalidEmails: invalidEmails
         });
     } catch (error) {
-        return next(new ErrorHandler(`Group Not Created due to some Problem: ${error}`, 400));
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: 'Validation error',
+                errors: errors
+            });
+        }
+        return next(new ErrorHandler(`Internal Server Error: ${error}`, 500));
     }
 });
 
 
+
+
+// Delete a group :
 exports.deleteGroup = catchAsyncError(async (req, res, next) => {
     try {
         const { id } = req.body;
@@ -446,6 +544,7 @@ exports.deleteGroup = catchAsyncError(async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Group not found.' });
         }
         console.log('group found')
+        await Message.deleteMany({ to: group._id });
         await group.deleteOne();
         console.log('group deleted')
         res.status(200).json({ success: true, message: 'Group deleted successfully.' });
@@ -456,6 +555,7 @@ exports.deleteGroup = catchAsyncError(async (req, res, next) => {
 });
 
 
+// Add more partitciapents to the group :
 exports.addParticipantsToGroup = catchAsyncError(async (req, res, next) => {
     try {
         const { participants, admin, groupId } = req.body;
@@ -492,7 +592,7 @@ exports.addParticipantsToGroup = catchAsyncError(async (req, res, next) => {
 
         res.status(201).json({
             success: true,
-            message: 'Request Sent Successfully to : ',
+            message: 'Request Sent Successfully !! ',
             validEmails: validEmails,
             invalidEmails: invalidEmails
         });
