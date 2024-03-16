@@ -1,5 +1,5 @@
 const express = require('express');
-const { declineRequest, getAllRequests, updateProfile, loginUser, registerUser, logOut, getFriends, addFriend, findFriend, sendRequest, removeFriend, getMyInfo, createGroup, deleteGroup, addParticipantsToGroup, removeParticiapent} = require('../controllers/userController');
+const { declineRequest, getAllRequests, updateProfile, loginUser, registerUser, logOut, getFriends, addFriend, findFriend, sendRequest, removeFriend, getMyInfo, createGroup, deleteGroup, addParticipantsToGroup,removeParticipant} = require('../controllers/userController');
 
 
 const router = express.Router();
@@ -19,6 +19,6 @@ router.route('/getmyinfo/:id').get(getMyInfo);
 router.route('/create-group').post(createGroup);
 router.route('/delete-group').delete(deleteGroup);
 router.route('/update-group').put(addParticipantsToGroup);
-router.route('/remove-group-participant').delete(removeParticiapent); 
+router.route('/remove-group-participant').delete(removeParticipant); 
 
 module.exports = router;

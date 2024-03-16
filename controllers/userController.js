@@ -602,23 +602,34 @@ exports.addParticipantsToGroup = catchAsyncError(async (req, res, next) => {
 });
 
 
-exports.removeParticiapent = async (req, res, next) => {
+// Remove a Particiapent from a group :
+exports.removeParticipant = async (req, res, next) => {
     try {
         const { participantId, groupId } = req.query;
-      console.log(groupId, participantId)
-      const group = await User.findById(groupId);
-      const participant = await User.findById(participantId);
-      group.friends.pull(participantId);
-      participant.friends.pull(groupId);
-      await group.save();
-      await participant.save();
-  
-      res.status(200).json({
-        success: true,
-        message: 'Participant removed from the group successfully',
-      });
+
+        if (!mongoose.Types.ObjectId.isValid(groupId) || !mongoose.Types.ObjectId.isValid(participantId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid group ID or participant ID',
+            });
+        }
+
+        const updateGroup = await User.findByIdAndUpdate(groupId, { $pull: { friends: participantId } });
+        const updateParticipant = await User.findByIdAndUpdate(participantId, { $pull: { friends: groupId } });
+
+        if (!updateGroup || !updateParticipant) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error removing participant from the group',
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Participant removed from the group successfully',
+        });
     } catch (error) {
-      return next(new ErrorHandler('Error removing participant from the group', 500));
+        console.error('Error removing participant from the group:', error);
+        return next(new ErrorHandler('Error removing participant from the group', 500));
     }
-  };
-  
+};  
