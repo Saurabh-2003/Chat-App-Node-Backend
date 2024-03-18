@@ -37,40 +37,37 @@ exports.createMessage = catchAsyncError(async (req, res, next) => {
 
 
 exports.getAllMessages = catchAsyncError(async (req, res, next) => {
-    const { userId, friendId } = req.body;
-    
+    const { userId, friendId, page = 1 } = req.body;
+    const resultPerPage = 10;
+    const skip = resultPerPage * (page - 1);
+
     const friend = await User.findById(friendId);
-    if(friend?.isGroup){
-        const messages = await Message.find({
-            to:friendId,
-        })
-        messages.sort((a, b) => a.timestamp - b.timestamp);
+    if (friend?.isGroup) {
+        const newMessages = await Message.find({
+            to: friendId,
+        }).sort({ timestamp: -1 })
+            .limit(resultPerPage)
+            .skip(skip);
+
+        newMessages.sort((a, b) => a.timestamp - b.timestamp);
         res.status(200).json({
             success: true,
-            messages: messages,
+            messages: newMessages,
         });
         return;
     }
-    // Find messages where from is userId and to is friendId
+
     const messagesFromUserToFriend = await Message.find({
-        from: userId,
-        to:friendId
-    });
-    
-    // Find messages where from is friendId and to is userId
-    const messagesFromFriendToUser = await Message.find({
-        from: friendId,
-        to:userId
-    });
-    
-    // Concatenate the two arrays of messages
-    const allMessages = [...messagesFromUserToFriend, ...messagesFromFriendToUser];
-
-    // Sort messages based on the timestamp in ascending order
-    allMessages.sort((a, b) => a.timestamp - b.timestamp);
-
+        $or: [
+            { from: userId, to: friendId },
+            { from: friendId, to: userId }
+        ]
+    }).sort({ timestamp: -1 })
+        .limit(resultPerPage)
+        .skip(skip);
+    messagesFromUserToFriend.sort((a, b) => a.timestamp - b.timestamp);
     res.status(200).json({
         success: true,
-        messages: allMessages,
+        messages: messagesFromUserToFriend,
     });
 });
