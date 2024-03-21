@@ -13,7 +13,7 @@ app.use(bodyParser.urlencoded({extended:true}));
 app.use(fileUpload());
 
 const corsOptions = {
-    origin: process.env.ORIGIN, 
+    origin: ['http://localhost:3000', 'https://chat-app-react-frontend.vercel.app/'], 
     credentials: true, 
 };
 
