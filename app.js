@@ -13,7 +13,7 @@ app.use(bodyParser.urlencoded({extended:true}));
 app.use(fileUpload());
 
 const corsOptions = {
-    origin: process.env.origin, 
+    origin: process.env.ORIGIN, 
     credentials: true, 
 };
 
