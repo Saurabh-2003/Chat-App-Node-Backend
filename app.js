@@ -4,6 +4,7 @@ const middleware = require("./middleware/error.js");
 const cors = require('cors');
 const user = require('./routes/userRoute');
 const message = require('./routes/messageRoute.js');
+const cookieParser = require('cookie-parser'); 
 
 const app = express();
 const fileUpload = require('express-fileupload');
@@ -11,9 +12,10 @@ const fileUpload = require('express-fileupload');
 app.use(express.json());
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(fileUpload());
+app.use(cookieParser())
 
 const corsOptions = {
-    origin: process.env.ORIGIN, 
+    origin:"http://localhost:3000", 
     credentials: true, 
 };
 

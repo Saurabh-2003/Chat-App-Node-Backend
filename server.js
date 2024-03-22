@@ -7,6 +7,8 @@ const { Server } = require('socket.io');
 const Message = require('./models/messageModel.js');
 const User = require('./models/userModel.js');
 const cloudinary  = require('cloudinary')
+
+
 dotenv.config({ path: "./config/config.env" });
 cloudinary.config({ 
   cloud_name: process.env.CLOUDINARY_NAME, 
@@ -19,7 +21,8 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin:process.env.ORIGIN,
+    origin:"http://localhost:3000",
+    credentials:true
   },
 });
 

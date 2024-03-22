@@ -4,8 +4,52 @@ const ErrorHandler = require('../utils/ErrorHandler');
 const mongoose = require('mongoose');
 const cloudinary = require('cloudinary')
 const Message = require('../models/messageModel')
+const jwt = require('jsonwebtoken');
 // Login a User :
 exports.loginUser = catchAsyncError(async (req, res, next) => {
+
+    if (req.cookies&&req.cookies.token) {
+        console.log("cookies accessible")
+        const {token} = req.cookies;
+        console.log("token not here"+token)
+        try {
+            // Verify the JWT token
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const { _id } = decoded;
+            
+            // Check if the decoded user ID is valid
+            if (!mongoose.Types.ObjectId.isValid(_id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid User Id',
+                });
+            }
+            
+            // Retrieve the user from the database
+            const user = await User.findById(_id);
+            
+            // Check if the user exists
+            if (!user) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'User not found',
+                });
+            }
+            
+            // Return the user data
+            return res.status(200).json({
+                success: true,
+                user
+            });
+        } catch (error) {
+            // Handle token verification errors
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid or expired token',
+            });
+        }
+    }
+
     const { email, password } = req.body;
     console.log(email, password)
     if (!email || !password) {
@@ -30,8 +74,8 @@ exports.loginUser = catchAsyncError(async (req, res, next) => {
         res.cookie('token', token, {
             httpOnly: true,
             maxAge: 30 * 24 * 60 * 60 * 1000,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict'
+            secure:true,
+            sameSite:"strict"
         });
 
         res.status(200).json({
