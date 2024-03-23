@@ -23,5 +23,10 @@ app.use(cors(corsOptions));
 app.use('/api/new', user);
 app.use('/api/mes', message);
 app.use(middleware);
+app.get('/cron-job', (req, res) => {
+    // Send a success message
+    res.status(200).json({ message: 'Connection to server successful' });
+});
+
 
 module.exports = app;
